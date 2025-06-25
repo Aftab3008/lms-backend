@@ -1,0 +1,190 @@
+import { Request, Response } from "express";
+import db from "../utils/db.js";
+import bcrypt from "bcryptjs";
+// import { RequestWithUserId } from "../middleware/verifyToken.js";
+import generateTokenAndCookie from "../utils/generateToken.js";
+import { PassportUser } from "../types/index.js";
+
+export const login = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({ message: "Please fill all fields" });
+    return;
+  }
+
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({ message: "User does not exist, Please register" });
+      return;
+    }
+    if (!user.password) {
+      res
+        .status(400)
+        .json({ message: "Password not set, Please set a password" });
+      return;
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+
+    if (!validPassword) {
+      res.status(401).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    const token = generateTokenAndCookie(res, user.id, user.email);
+
+    user.lastLogin = new Date();
+
+    await db.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        lastLogin: user.lastLogin,
+      },
+    });
+
+    res.status(200).json({
+      message: "User logged in successfully",
+      data: {
+        ...user,
+        password: undefined,
+      },
+      token: token,
+      success: true,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+};
+
+export const register = async (req: Request, res: Response) => {
+  const { email, password, name } = req.body;
+
+  if (!email || !password || !name) {
+    res.status(400).json({ message: "Please fill all fields" });
+    return;
+  }
+
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+    if (user) {
+      res.status(400).json({ message: "User already exists" });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = await db.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        lastLogin: new Date(),
+      },
+    });
+
+    const token = generateTokenAndCookie(res, newUser.id, newUser.email);
+
+    //TODO: Email verification logic can be added here
+
+    res.status(201).json({
+      message: "User created successfully",
+      data: {
+        ...newUser,
+        password: undefined,
+      },
+      token: token,
+      success: true,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
+  res.status(200).json({ message: "User logged out successfully" });
+  return;
+};
+
+export const callback = async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      console.error("Missing user ID in OAuth callback");
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=auth_failed`);
+      return;
+    }
+
+    const userId = req.user.id;
+
+    const user = await db.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      console.error(`User with ID ${userId} not found in database`);
+      res.redirect(`${process.env.FRONTEND_URL}/login?error=user_not_found`);
+      return;
+    }
+
+    const token = generateTokenAndCookie(res, user.id, user.email);
+
+    const redirectURL = `${process.env.FRONTEND_URL}/oauth2/redirect?token=${token}`;
+    res.redirect(redirectURL);
+  } catch (error) {
+    console.error("OAuth callback error:", error);
+    res.redirect(`${process.env.FRONTEND_URL}/login`);
+  }
+};
+
+// export const getUser = async (req: RequestWithUserId, res: Response) => {
+//   const userId = req.userId;
+
+//   try {
+//     const user = await db.user.findUnique({
+//       where: {
+//         id: userId,
+//       },
+//     });
+
+//     if (!user) {
+//       res.status(404).json({ message: "User not found" });
+//       return;
+//     }
+
+//     res.status(200).json({
+//       data: {
+//         ...user,
+//         password: undefined,
+//       },
+//       success: true,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Internal server error" });
+//     return;
+//   }
+// };
