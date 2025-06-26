@@ -12,4 +12,5 @@ declare global {
 
 export interface RequestWithUserId extends Request {
   userId?: string;
+  roles?: string[];
 }

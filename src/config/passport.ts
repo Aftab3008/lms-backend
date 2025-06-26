@@ -24,6 +24,7 @@ export default function configurePassport() {
         try {
           const email = profile.emails?.[0]?.value;
           const isEmailVerified = profile.emails?.[0]?.verified;
+          const profileUrl = profile.photos?.[0]?.value;
 
           if (!email) {
             done(new Error("No email in Google profile"));
@@ -44,6 +45,7 @@ export default function configurePassport() {
                 password: null,
                 googleId: profile.id,
                 isVerified: isEmailVerified || false,
+                profileUrl: profileUrl,
               },
             });
           } else if (!user.googleId) {

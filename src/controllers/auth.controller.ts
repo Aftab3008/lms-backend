@@ -1,9 +1,8 @@
-import { Request, Response } from "express";
-import db from "../utils/db.js";
 import bcrypt from "bcryptjs";
-// import { RequestWithUserId } from "../middleware/verifyToken.js";
+import { Request, Response } from "express";
+import { RequestWithUserId } from "../types/index.js";
+import db from "../utils/db.js";
 import generateTokenAndCookie from "../utils/generateToken.js";
-import { PassportUser } from "../types/index.js";
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -68,9 +67,10 @@ export const login = async (req: Request, res: Response) => {
 };
 
 export const register = async (req: Request, res: Response) => {
-  const { email, password, name } = req.body;
+  const { email, password, name, agreeToTerms, agreeToPrivacyPolicy } =
+    req.body;
 
-  if (!email || !password || !name) {
+  if (!email || !password || !name || !agreeToTerms || !agreeToPrivacyPolicy) {
     res.status(400).json({ message: "Please fill all fields" });
     return;
   }
@@ -95,6 +95,9 @@ export const register = async (req: Request, res: Response) => {
         password: hashedPassword,
         name,
         lastLogin: new Date(),
+        profileUrl: "/assets/default.jpg",
+        agreeToTerms,
+        agreeToPrivacyPolicy,
       },
     });
 
@@ -160,31 +163,33 @@ export const callback = async (req: Request, res: Response) => {
   }
 };
 
-// export const getUser = async (req: RequestWithUserId, res: Response) => {
-//   const userId = req.userId;
+export const getUser = async (req: RequestWithUserId, res: Response) => {
+  const userId = req.userId;
 
-//   try {
-//     const user = await db.user.findUnique({
-//       where: {
-//         id: userId,
-//       },
-//     });
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        id: userId,
+      },
+      omit: {
+        password: true,
+      },
+    });
 
-//     if (!user) {
-//       res.status(404).json({ message: "User not found" });
-//       return;
-//     }
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
 
-//     res.status(200).json({
-//       data: {
-//         ...user,
-//         password: undefined,
-//       },
-//       success: true,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Internal server error" });
-//     return;
-//   }
-// };
+    res.status(200).json({
+      data: {
+        ...user,
+      },
+      success: true,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+    return;
+  }
+};

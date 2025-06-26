@@ -12,14 +12,17 @@ model User {
   email                String       @unique
   password             String?
   name                 String?
-  googleId             String?      @unique
+  googleId             String?
+  profileUrl           String?
   isVerified           Boolean      @default(false)
+  agreeToTerms         Boolean      @default(false)
+  agreeToPrivacyPolicy Boolean      @default(false)
   verificationCode     String?
   verificationExpires  DateTime?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   lastLogin            DateTime?
-  role                 UserRole[]   @default([USER])
+  roles                UserRole[]   @default([USER])
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   courses              Course[]     @relation("CourseInstructor")

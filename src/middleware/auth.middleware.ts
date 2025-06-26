@@ -19,7 +19,7 @@ export const verifyToken = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const token = req.cookies.token;
+  const token = req.cookies.access_token;
   if (!token) {
     throw new AppError("User unauthorized", 401);
   }
@@ -27,7 +27,7 @@ export const verifyToken = async (
   try {
     const decoded = jwt.verify(token, secret_key) as jwt.JwtPayload;
     req.userId = decoded.userId;
-    return next();
+    next();
   } catch (err: any) {
     if (err instanceof TokenExpiredError) {
       res.clearCookie("token", {
