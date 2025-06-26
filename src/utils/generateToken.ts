@@ -17,7 +17,7 @@ const generateTokenAndCookie = (res: Response, id: string, email: string) => {
   res.cookie("access_token", token, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: isProduction ? "lax" : "none",
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
