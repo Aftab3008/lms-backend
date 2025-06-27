@@ -46,6 +46,9 @@ export default function configurePassport() {
                 googleId: profile.id,
                 isVerified: isEmailVerified || false,
                 profileUrl: profileUrl,
+                agreeToPrivacyPolicy: true,
+                agreeToTerms: true,
+                lastLogin: new Date(),
               },
             });
           } else if (!user.googleId) {
@@ -54,6 +57,7 @@ export default function configurePassport() {
               data: {
                 googleId: profile.id,
                 isVerified: isEmailVerified || user.isVerified,
+                lastLogin: new Date(),
               },
             });
           }

@@ -8,11 +8,13 @@ import {
   register,
 } from "../controllers/auth.controller.js";
 import { verifyToken } from "../middleware/auth.middleware.js";
+import { validateBody } from "../middleware/validateBody.middleware.js";
+import { signInSchema, signUpSchema } from "../schema/zodSchema.js";
 
 const authRouter = express.Router();
 
-authRouter.post("/login", login);
-authRouter.post("/register", register);
+authRouter.post("/login", validateBody(signInSchema), login);
+authRouter.post("/register", validateBody(signUpSchema), register);
 authRouter.post("/logout", verifyToken, logout);
 authRouter.get("/me", verifyToken, getUser);
 

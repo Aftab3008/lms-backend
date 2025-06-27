@@ -7,11 +7,6 @@ import generateTokenAndCookie from "../utils/generateToken.js";
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
-    res.status(400).json({ message: "Please fill all fields" });
-    return;
-  }
-
   try {
     const user = await db.user.findUnique({
       where: {
@@ -20,7 +15,7 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      res.status(404).json({ message: "User does not exist, Please register" });
+      res.status(404).json({ message: "User does not exist" });
       return;
     }
     if (!user.password) {
@@ -33,7 +28,7 @@ export const login = async (req: Request, res: Response) => {
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
-      res.status(401).json({ message: "Invalid credentials" });
+      res.status(401).json({ message: "Invalid Email or Password" });
       return;
     }
 
@@ -69,11 +64,6 @@ export const login = async (req: Request, res: Response) => {
 export const register = async (req: Request, res: Response) => {
   const { email, password, name, agreeToTerms, agreeToPrivacyPolicy } =
     req.body;
-
-  if (!email || !password || !name || !agreeToTerms || !agreeToPrivacyPolicy) {
-    res.status(400).json({ message: "Please fill all fields" });
-    return;
-  }
 
   try {
     const user = await db.user.findUnique({
@@ -122,10 +112,10 @@ export const register = async (req: Request, res: Response) => {
 };
 
 export const logout = async (req: Request, res: Response) => {
-  res.clearCookie("token", {
+  res.clearCookie("access_token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "none",
   });
   res.status(200).json({ message: "User logged out successfully" });
   return;
