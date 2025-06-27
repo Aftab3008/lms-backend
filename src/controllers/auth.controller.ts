@@ -19,9 +19,7 @@ export const login = async (req: Request, res: Response) => {
       return;
     }
     if (!user.password) {
-      res
-        .status(400)
-        .json({ message: "Password not set, Please set a password" });
+      res.status(400).json({ message: "Please set a password to continue" });
       return;
     }
 
