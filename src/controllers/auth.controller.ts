@@ -11,6 +11,8 @@ import {
 import { generateSecureOTP } from "../lib/utils.js";
 import { sendOtpNotification } from "../services/otp.services.js";
 
+// Updated prisma client
+
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
