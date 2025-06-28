@@ -1,13 +1,13 @@
-import express from "express";
-import dotenv from "dotenv";
 import bodyParser from "body-parser";
-import cors from "cors";
 import cookieParser from "cookie-parser";
-import authRouter from "./routes/auth.routes.js";
+import cors from "cors";
+import dotenv from "dotenv";
+import express from "express";
 import passport from "passport";
 import configurePassport from "./config/passport.js";
 import { errorHandler } from "./middleware/error.middleware.js";
-import { sendOtpNotification } from "./services/otp.services.js";
+import authRouter from "./routes/auth.routes.js";
+import { redis } from "./config/redis.js";
 
 dotenv.config();
 

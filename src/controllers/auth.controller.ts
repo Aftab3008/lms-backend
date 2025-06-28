@@ -1,17 +1,14 @@
 import bcrypt from "bcryptjs";
 import { Request, Response } from "express";
+import { redis } from "../config/redis.js";
+import { otpService } from "../services/otp.services.js";
 import { RequestWithUserId } from "../types/index.js";
 import db from "../utils/db.js";
 import {
   clearAccessTokenCookie,
   clearOtpCookie,
-  generateOtpToken,
   generateTokenAndCookie,
 } from "../utils/generateToken.js";
-import { generateSecureOTP } from "../lib/utils.js";
-import { sendOtpNotification } from "../services/otp.services.js";
-
-// Updated prisma client
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -52,36 +49,7 @@ export const login = async (req: Request, res: Response) => {
     }
 
     if (!user.isVerified) {
-      const otp = generateSecureOTP();
-
-      const newOtp = await db.otp.create({
-        data: {
-          userId: user.id,
-          otp,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        },
-        select: {
-          id: true,
-          otp: true,
-          expiresAt: true,
-        },
-      });
-
-      if (!newOtp) {
-        res
-          .status(500)
-          .json({ message: "Failed to create OTP", success: false });
-        return;
-      }
-
-      const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
-
-      if (!otpToken.success) {
-        res.status(500).json({ message: otpToken.message, success: false });
-        return;
-      }
-
-      const result = await sendOtpNotification(user.email, otp);
+      const result = await otpService(res, user.id, user.email);
 
       if (!result.success) {
         clearOtpCookie(res);
@@ -118,7 +86,17 @@ export const login = async (req: Request, res: Response) => {
         profileUrl: true,
       },
     });
-
+    await redis.set(
+      `user:${user.id}`,
+      JSON.stringify({
+        id: data.id,
+        email: data.email,
+        name: data.name,
+        profileUrl: data.profileUrl,
+      }),
+      "EX",
+      60 * 60 * 24 // Cache for 24 hours
+    );
     res.status(200).json({
       message: "User logged in successfully",
       data,
@@ -171,38 +149,15 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    const otp = generateSecureOTP();
-
-    const newOtp = await db.otp.create({
-      data: {
-        userId: newUser.id,
-        otp,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-      },
-      select: {
-        id: true,
-        otp: true,
-        expiresAt: true,
-      },
-    });
-
-    if (!newOtp) {
-      res.status(500).json({ message: "Failed to create OTP", success: false });
-      return;
-    }
-    const otpToken = generateOtpToken(
-      res,
-      newUser.id,
-      newUser.email,
-      newOtp.id
-    );
-
-    if (!otpToken.success) {
-      res.status(500).json({ message: otpToken.message, success: false });
+    if (!newUser) {
+      res.status(500).json({
+        message: "Failed to create account, Please try again later",
+        success: false,
+      });
       return;
     }
 
-    const result = await sendOtpNotification(newUser.email, otp);
+    const result = await otpService(res, newUser.id, newUser.email);
 
     if (!result.success) {
       clearOtpCookie(res);
@@ -264,6 +219,15 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
   const userId = req.userId;
 
   try {
+    const cachedUser = await redis.get(`user:${userId}`);
+    if (cachedUser) {
+      res.status(200).json({
+        data: JSON.parse(cachedUser),
+        success: true,
+      });
+      return;
+    }
+
     const user = await db.user.findUnique({
       where: {
         id: userId,
@@ -281,51 +245,64 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
       res.status(404).json({ message: "User not found", success: false });
       return;
     }
-    if (!user.isVerified) {
-      const otp = generateSecureOTP();
+    // if (!user.isVerified) {
+    //   const otp = generateSecureOTP();
 
-      const newOtp = await db.otp.create({
-        data: {
-          userId: user.id,
-          otp,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        },
-        select: {
-          id: true,
-          otp: true,
-          expiresAt: true,
-        },
-      });
+    //   const newOtp = await db.otp.create({
+    //     data: {
+    //       userId: user.id,
+    //       otp,
+    //       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    //     },
+    //     select: {
+    //       id: true,
+    //       otp: true,
+    //       expiresAt: true,
+    //     },
+    //   });
 
-      if (!newOtp) {
-        res
-          .status(500)
-          .json({ message: "Failed to create OTP", success: false });
-        return;
-      }
+    //   if (!newOtp) {
+    //     res
+    //       .status(500)
+    //       .json({ message: "Failed to create OTP", success: false });
+    //     return;
+    //   }
 
-      const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
+    //   const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
 
-      if (!otpToken.success) {
-        res.status(500).json({ message: otpToken.message, success: false });
-        return;
-      }
+    //   if (!otpToken.success) {
+    //     res.status(500).json({ message: otpToken.message, success: false });
+    //     return;
+    //   }
 
-      const result = await sendOtpNotification(user.email, otp);
+    //   const result = await sendOtpNotification(user.email, otp);
 
-      if (!result.success) {
-        clearOtpCookie(res);
-        res.status(500).json({ message: "Failed to send OTP", success: false });
-        return;
-      }
+    //   if (!result.success) {
+    //     clearOtpCookie(res);
+    //     res.status(500).json({ message: "Failed to send OTP", success: false });
+    //     return;
+    //   }
 
-      res.status(403).json({
-        message: "Please verify your email to continue",
-        redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
-        success: false,
-      });
-      return;
-    }
+    //   res.status(403).json({
+    //     message: "Please verify your email to continue",
+    //     redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
+    //     success: false,
+    //   });
+    //   return;
+    // }
+
+    await redis.set(
+      `user:${userId}`,
+      JSON.stringify({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        profileUrl: user.profileUrl,
+      }),
+      "EX",
+      60 * 60 * 24 // Cache for 24 hours
+    );
+
     res.status(200).json({
       data: {
         ...user,
@@ -400,7 +377,17 @@ export const verifyOtp = async (req: RequestWithUserId, res: Response) => {
       res.status(500).json({ message: token.message, success: false });
       return;
     }
-
+    await redis.set(
+      `user:${userId}`,
+      JSON.stringify({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        profileUrl: updatedUser.profileUrl,
+      }),
+      "EX",
+      60 * 60 * 24
+    );
     res.status(200).json({
       message: "Email verified successfully",
       data: {
