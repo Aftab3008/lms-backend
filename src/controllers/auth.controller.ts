@@ -2,7 +2,14 @@ import bcrypt from "bcryptjs";
 import { Request, Response } from "express";
 import { RequestWithUserId } from "../types/index.js";
 import db from "../utils/db.js";
-import generateTokenAndCookie from "../utils/generateToken.js";
+import {
+  clearAccessTokenCookie,
+  clearOtpCookie,
+  generateOtpToken,
+  generateTokenAndCookie,
+} from "../utils/generateToken.js";
+import { generateSecureOTP } from "../lib/utils.js";
+import { sendOtpNotification } from "../services/otp.services.js";
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -12,49 +19,112 @@ export const login = async (req: Request, res: Response) => {
       where: {
         email,
       },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        isVerified: true,
+        name: true,
+        profileUrl: true,
+      },
     });
 
     if (!user) {
-      res.status(404).json({ message: "User does not exist" });
+      res.status(404).json({ message: "User does not exist", success: false });
       return;
     }
     if (!user.password) {
-      res.status(400).json({ message: "Please set a password to continue" });
+      res
+        .status(400)
+        .json({ message: "Please set a password to continue", success: false });
       return;
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
-      res.status(401).json({ message: "Invalid Email or Password" });
+      res
+        .status(401)
+        .json({ message: "Invalid Email or Password", success: false });
+      return;
+    }
+
+    if (!user.isVerified) {
+      const otp = generateSecureOTP();
+
+      const newOtp = await db.otp.create({
+        data: {
+          userId: user.id,
+          otp,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+        select: {
+          id: true,
+          otp: true,
+          expiresAt: true,
+        },
+      });
+
+      if (!newOtp) {
+        res
+          .status(500)
+          .json({ message: "Failed to create OTP", success: false });
+        return;
+      }
+
+      const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
+
+      if (!otpToken.success) {
+        res.status(500).json({ message: otpToken.message, success: false });
+        return;
+      }
+
+      const result = await sendOtpNotification(user.email, otp);
+
+      if (!result.success) {
+        clearOtpCookie(res);
+        res.status(500).json({ message: "Failed to send OTP", success: false });
+        return;
+      }
+
+      res.status(403).json({
+        message: "Please verify your email to continue",
+        redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
+        success: false,
+      });
       return;
     }
 
     const token = generateTokenAndCookie(res, user.id, user.email);
 
-    user.lastLogin = new Date();
+    if (!token.success) {
+      res.status(500).json({ message: token.message, success: false });
+      return;
+    }
 
-    await db.user.update({
+    const data = await db.user.update({
       where: {
         id: user.id,
       },
       data: {
-        lastLogin: user.lastLogin,
+        lastLogin: new Date(),
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        profileUrl: true,
       },
     });
 
     res.status(200).json({
       message: "User logged in successfully",
-      data: {
-        ...user,
-        password: undefined,
-      },
-      token: token,
+      data,
       success: true,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: "Internal server error", success: false });
     return;
   }
 };
@@ -62,16 +132,19 @@ export const login = async (req: Request, res: Response) => {
 export const register = async (req: Request, res: Response) => {
   const { email, password, name, agreeToTerms, agreeToPrivacyPolicy } =
     req.body;
-
   try {
     const user = await db.user.findUnique({
       where: {
         email,
       },
+      select: {
+        id: true,
+        email: true,
+      },
     });
 
     if (user) {
-      res.status(400).json({ message: "User already exists" });
+      res.status(400).json({ message: "User already exists", success: false });
       return;
     }
 
@@ -87,35 +160,69 @@ export const register = async (req: Request, res: Response) => {
         agreeToTerms,
         agreeToPrivacyPolicy,
       },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        profileUrl: true,
+        isVerified: true,
+      },
     });
 
-    const token = generateTokenAndCookie(res, newUser.id, newUser.email);
+    const otp = generateSecureOTP();
 
-    //TODO: Email verification logic can be added here
-
-    res.status(201).json({
-      message: "User created successfully",
+    const newOtp = await db.otp.create({
       data: {
-        ...newUser,
-        password: undefined,
+        userId: newUser.id,
+        otp,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       },
-      token: token,
+      select: {
+        id: true,
+        otp: true,
+        expiresAt: true,
+      },
+    });
+
+    if (!newOtp) {
+      res.status(500).json({ message: "Failed to create OTP", success: false });
+      return;
+    }
+    const otpToken = generateOtpToken(
+      res,
+      newUser.id,
+      newUser.email,
+      newOtp.id
+    );
+
+    if (!otpToken.success) {
+      res.status(500).json({ message: otpToken.message, success: false });
+      return;
+    }
+
+    const result = await sendOtpNotification(newUser.email, otp);
+
+    if (!result.success) {
+      clearOtpCookie(res);
+      res.status(500).json({ message: "Failed to send OTP", success: false });
+      return;
+    }
+    res.status(201).json({
+      message: "Please verify your email to complete registration",
       success: true,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: "Internal server error", success: false });
     return;
   }
 };
 
 export const logout = async (req: Request, res: Response) => {
-  res.clearCookie("access_token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "none",
-  });
-  res.status(200).json({ message: "User logged out successfully" });
+  clearAccessTokenCookie(res);
+  res
+    .status(200)
+    .json({ message: "User logged out successfully", success: true });
   return;
 };
 
@@ -159,25 +266,148 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
       where: {
         id: userId,
       },
-      omit: {
-        password: true,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        profileUrl: true,
+        isVerified: true,
       },
     });
 
     if (!user) {
-      res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found", success: false });
       return;
     }
+    if (!user.isVerified) {
+      const otp = generateSecureOTP();
 
+      const newOtp = await db.otp.create({
+        data: {
+          userId: user.id,
+          otp,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+        select: {
+          id: true,
+          otp: true,
+          expiresAt: true,
+        },
+      });
+
+      if (!newOtp) {
+        res
+          .status(500)
+          .json({ message: "Failed to create OTP", success: false });
+        return;
+      }
+
+      const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
+
+      if (!otpToken.success) {
+        res.status(500).json({ message: otpToken.message, success: false });
+        return;
+      }
+
+      const result = await sendOtpNotification(user.email, otp);
+
+      if (!result.success) {
+        clearOtpCookie(res);
+        res.status(500).json({ message: "Failed to send OTP", success: false });
+        return;
+      }
+
+      res.status(403).json({
+        message: "Please verify your email to continue",
+        redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
+        success: false,
+      });
+      return;
+    }
     res.status(200).json({
       data: {
         ...user,
+        isVerified: undefined,
       },
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error" });
+    console.log(error);
+    res.status(500).json({ message: "Internal server error", success: false });
     return;
+  }
+};
+
+export const verifyOtp = async (req: RequestWithUserId, res: Response) => {
+  const userId = req.userId;
+  const otpId = req.otpId;
+  const { otp } = req.body;
+
+  try {
+    const otpRecord = await db.otp.findUnique({
+      where: {
+        id: otpId,
+      },
+    });
+
+    if (!otpRecord) {
+      res.status(404).json({ message: "OTP not found", success: false });
+      return;
+    }
+
+    if (new Date() > otpRecord.expiresAt) {
+      res.status(400).json({ message: "OTP expired", success: false });
+      return;
+    }
+    if (otpRecord.userId !== userId) {
+      res.status(403).json({ message: "Unauthorized", success: false });
+      return;
+    }
+
+    if (otpRecord.otp !== otp) {
+      res.status(400).json({ message: "Invalid OTP", success: false });
+      return;
+    }
+    const updatedUser = await db.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        isVerified: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        profileUrl: true,
+      },
+    });
+    await db.otp.delete({
+      where: {
+        id: otpId,
+      },
+    });
+    clearOtpCookie(res);
+    const token = generateTokenAndCookie(
+      res,
+      updatedUser.id,
+      updatedUser.email
+    );
+
+    if (!token.success) {
+      res.status(500).json({ message: token.message, success: false });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Email verified successfully",
+      data: {
+        ...updatedUser,
+      },
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal server error", success: false });
   }
 };

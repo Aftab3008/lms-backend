@@ -17,8 +17,6 @@ model User {
   isVerified           Boolean      @default(false)
   agreeToTerms         Boolean      @default(false)
   agreeToPrivacyPolicy Boolean      @default(false)
-  verificationCode     String?
-  verificationExpires  DateTime?
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
   lastLogin            DateTime?
@@ -29,6 +27,7 @@ model User {
   reviews              Review[]
   ratings              Rating[]
   enrollments          Enrollment[]
+  otps                 Otp[]
 }
 
 model Course {
@@ -81,6 +80,15 @@ model Enrollment {
   user      User     @relation(fields: [userId], references: [id])
   course    Course   @relation(fields: [courseId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model Otp {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  otp       String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Category {

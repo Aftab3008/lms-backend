@@ -7,6 +7,7 @@ import authRouter from "./routes/auth.routes.js";
 import passport from "passport";
 import configurePassport from "./config/passport.js";
 import { errorHandler } from "./middleware/error.middleware.js";
+import { sendOtpNotification } from "./services/otp.services.js";
 
 dotenv.config();
 
@@ -34,6 +35,6 @@ app.use("/api/auth", authRouter);
 // Global error handler (should be the last middleware)
 app.use(errorHandler);
 
-app.listen(port, () => {
+app.listen(port, async () => {
   console.log(`Server is running at http://localhost:${port}`);
 });

@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { RequestWithUserId } from "../types/index.js";
 import { AppError } from "../utils/error.js";
-import { clearAccessTokenCookie } from "../utils/generateToken.js";
+import { clearOtpCookie } from "../utils/generateToken.js";
 
 const secret_key = process.env.JWT_SECRET_KEY;
 const FRONTEND_URL = process.env.FRONTEND_URL;
@@ -15,12 +15,12 @@ if (!FRONTEND_URL) {
   throw new AppError("FRONTEND_URL not defined", 500);
 }
 
-export const verifyToken = async (
+export const verifyOtpToken = async (
   req: RequestWithUserId,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const token = req.cookies.access_token;
+  const token = req.cookies.otp_token;
   if (!token) {
     throw new AppError("User unauthorized", 401);
   }
@@ -28,12 +28,13 @@ export const verifyToken = async (
   try {
     const decoded = jwt.verify(token, secret_key) as jwt.JwtPayload;
     req.userId = decoded.userId;
+    req.otpId = decoded.otpId;
     next();
   } catch (err: any) {
     if (err instanceof TokenExpiredError) {
-      clearAccessTokenCookie(res);
+      clearOtpCookie(res);
       res.status(401).json({
-        message: "Token expired, please login again",
+        message: "Token expired, please request a new OTP",
         success: false,
       });
       return;
