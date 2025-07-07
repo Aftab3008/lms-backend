@@ -7,7 +7,6 @@ import passport from "passport";
 import configurePassport from "./config/passport.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import authRouter from "./routes/auth.routes.js";
-import { redis } from "./config/redis.js";
 
 dotenv.config();
 

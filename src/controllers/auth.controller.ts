@@ -59,7 +59,7 @@ export const login = async (req: Request, res: Response) => {
 
       res.status(403).json({
         message: "Please verify your email to continue",
-        redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
+        redirectUrl: `${process.env.FRONTEND_URL}/auth/verify-email`,
         success: false,
       });
       return;
@@ -207,7 +207,7 @@ export const callback = async (req: Request, res: Response) => {
 
     const token = generateTokenAndCookie(res, user.id, user.email);
 
-    const redirectURL = `${process.env.FRONTEND_URL}/oauth2/redirect?token=${token}`;
+    const redirectURL = `${process.env.FRONTEND_URL}/`; //oauth2/redirect?token=${token}
     res.redirect(redirectURL);
   } catch (error) {
     console.error("OAuth callback error:", error);
