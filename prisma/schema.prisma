@@ -25,7 +25,6 @@ model User {
   updatedAt            DateTime     @updatedAt
   courses              Course[]     @relation("CourseInstructor")
   reviews              Review[]
-  ratings              Rating[]
   enrollments          Enrollment[]
   otps                 Otp[]
 }
@@ -34,7 +33,9 @@ model Course {
   id            String       @id @default(auto()) @map("_id") @db.ObjectId
   title         String
   description   String
+  thumbnailFile String?
   thumbnail     String?
+  thumbnailId   String?
   categoryId    String       @db.ObjectId
   category      Category     @relation(fields: [categoryId], references: [id])
   price         Float
@@ -44,33 +45,59 @@ model Course {
   instructorId  String       @db.ObjectId
   instructor    User         @relation("CourseInstructor", fields: [instructorId], references: [id])
   reviews       Review[]
-  ratings       Rating[]
   enrollments   Enrollment[]
   duration      Int
+  sections      Section[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
 
+model Section {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  courseId    String   @db.ObjectId
+  course      Course   @relation(fields: [courseId], references: [id])
+  title       String
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lessons     Lesson[]
+}
+
+model Lesson {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  sectionId   String   @db.ObjectId
+  title       String
+  description String?
+  videoUrl    String?
+  videoId     String?
+  duration    Int?
+  order       Int
+  fileName    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  section     Section  @relation(fields: [sectionId], references: [id])
+}
+
 model Rating {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
-  courseId  String   @db.ObjectId
-  rating    Int
+  rating    Int?
+  reviewId  String   @unique @db.ObjectId
+  review    Review   @relation(fields: [reviewId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id])
-  course    Course   @relation(fields: [courseId], references: [id])
 }
 
 model Review {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   userId    String   @db.ObjectId
   courseId  String   @db.ObjectId
-  content   String
+  content   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
   course    Course   @relation(fields: [courseId], references: [id])
+  rating    Rating?
 }
 
 model Enrollment {

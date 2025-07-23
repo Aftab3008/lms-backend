@@ -7,6 +7,9 @@ import passport from "passport";
 import configurePassport from "./config/passport.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import authRouter from "./routes/auth.routes.js";
+import coursesRouter from "./routes/courses.route.js";
+import imageKitRouter from "./routes/imageKit.routes.js";
+import instructorRouter from "./routes/insructor.routes.js";
 
 dotenv.config();
 
@@ -30,6 +33,9 @@ configurePassport();
 app.use(passport.initialize());
 
 app.use("/api/auth", authRouter);
+app.use("/api/courses", coursesRouter);
+app.use("/api/instructor", instructorRouter);
+app.use("/api/imagekit", imageKitRouter);
 
 // Global error handler (should be the last middleware)
 app.use(errorHandler);

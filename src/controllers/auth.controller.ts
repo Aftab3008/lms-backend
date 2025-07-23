@@ -9,6 +9,7 @@ import {
   clearOtpCookie,
   generateTokenAndCookie,
 } from "../utils/generateToken.js";
+import { Prisma } from "@prisma/client";
 
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -25,6 +26,7 @@ export const login = async (req: Request, res: Response) => {
         isVerified: true,
         name: true,
         profileUrl: true,
+        roles: true,
       },
     });
 
@@ -84,6 +86,7 @@ export const login = async (req: Request, res: Response) => {
         email: true,
         name: true,
         profileUrl: true,
+        roles: true,
       },
     });
     await redis.set(
@@ -93,9 +96,10 @@ export const login = async (req: Request, res: Response) => {
         email: data.email,
         name: data.name,
         profileUrl: data.profileUrl,
+        isAdmin: data.roles.includes("ADMIN"),
       }),
       "EX",
-      60 * 60 * 24 // Cache for 24 hours
+      60 * 60 * 24 * 7
     );
     res.status(200).json({
       message: "User logged in successfully",
@@ -113,21 +117,6 @@ export const register = async (req: Request, res: Response) => {
   const { email, password, name, agreeToTerms, agreeToPrivacyPolicy } =
     req.body;
   try {
-    const user = await db.user.findUnique({
-      where: {
-        email,
-      },
-      select: {
-        id: true,
-        email: true,
-      },
-    });
-
-    if (user) {
-      res.status(400).json({ message: "User already exists", success: false });
-      return;
-    }
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await db.user.create({
@@ -169,9 +158,32 @@ export const register = async (req: Request, res: Response) => {
       success: true,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Internal server error", success: false });
-    return;
+    console.error("Error during registration:", error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        res.status(400).json({
+          message: "User already exists.",
+          success: false,
+        });
+        return;
+      } else if (error.code === "P2006") {
+        res.status(400).json({
+          message: "Invalid data provided.",
+          success: false,
+        });
+        return;
+      } else {
+        res.status(500).json({
+          message: "Something went wrong.",
+          success: false,
+        });
+        return;
+      }
+    } else if (error instanceof Error) {
+      res
+        .status(500)
+        .json({ message: "Internal server error", success: false });
+    }
   }
 };
 
@@ -238,6 +250,7 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
         name: true,
         profileUrl: true,
         isVerified: true,
+        roles: true,
       },
     });
 
@@ -245,51 +258,6 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
       res.status(404).json({ message: "User not found", success: false });
       return;
     }
-    // if (!user.isVerified) {
-    //   const otp = generateSecureOTP();
-
-    //   const newOtp = await db.otp.create({
-    //     data: {
-    //       userId: user.id,
-    //       otp,
-    //       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    //     },
-    //     select: {
-    //       id: true,
-    //       otp: true,
-    //       expiresAt: true,
-    //     },
-    //   });
-
-    //   if (!newOtp) {
-    //     res
-    //       .status(500)
-    //       .json({ message: "Failed to create OTP", success: false });
-    //     return;
-    //   }
-
-    //   const otpToken = generateOtpToken(res, user.id, user.email, newOtp.id);
-
-    //   if (!otpToken.success) {
-    //     res.status(500).json({ message: otpToken.message, success: false });
-    //     return;
-    //   }
-
-    //   const result = await sendOtpNotification(user.email, otp);
-
-    //   if (!result.success) {
-    //     clearOtpCookie(res);
-    //     res.status(500).json({ message: "Failed to send OTP", success: false });
-    //     return;
-    //   }
-
-    //   res.status(403).json({
-    //     message: "Please verify your email to continue",
-    //     redirectUrl: `${process.env.FRONTEND_URL}/verify-email`,
-    //     success: false,
-    //   });
-    //   return;
-    // }
 
     await redis.set(
       `user:${userId}`,
@@ -298,15 +266,17 @@ export const getUser = async (req: RequestWithUserId, res: Response) => {
         email: user.email,
         name: user.name,
         profileUrl: user.profileUrl,
+        isAdmin: user.roles.includes("ADMIN"),
       }),
       "EX",
-      60 * 60 * 24 // Cache for 24 hours
+      60 * 60 * 24 * 7
     );
 
     res.status(200).json({
       data: {
         ...user,
         isVerified: undefined,
+        isAdmin: user.roles.includes("ADMIN"),
       },
       success: true,
     });

@@ -10,7 +10,11 @@ import {
 } from "../controllers/auth.controller.js";
 import { verifyToken } from "../middleware/auth.middleware.js";
 import { validateBody } from "../middleware/validateBody.middleware.js";
-import { OtpSchema, signInSchema, signUpSchema } from "../schema/zodSchema.js";
+import {
+  OtpSchema,
+  signInSchema,
+  signUpSchema,
+} from "../schema/auth.schema.js";
 import { verifyOtpToken } from "../middleware/otp.middleware.js";
 
 const authRouter = express.Router();
