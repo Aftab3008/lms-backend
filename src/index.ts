@@ -9,7 +9,7 @@ import { errorHandler } from "./middleware/error.middleware.js";
 import authRouter from "./routes/auth.routes.js";
 import coursesRouter from "./routes/courses.route.js";
 import imageKitRouter from "./routes/imageKit.routes.js";
-import instructorRouter from "./routes/insructor.routes.js";
+import instructorRouter from "./routes/instructor.routes.js";
 
 dotenv.config();
 

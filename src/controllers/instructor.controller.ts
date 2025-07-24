@@ -106,7 +106,17 @@ export async function createCategory(req: RequestWithUserId, res: Response) {
 
 export async function createCourse(req: RequestWithUserId, res: Response) {
   try {
-    const { title, description, category, level, price } = req.body;
+    const {
+      title,
+      description,
+      category,
+      level,
+      price,
+      briefDescription,
+      requirements,
+      objectives,
+      language,
+    } = req.body;
     const userId = req.userId;
 
     if (!userId) {
@@ -138,9 +148,22 @@ export async function createCourse(req: RequestWithUserId, res: Response) {
         OriginalPrice: price,
         duration: 0,
         instructorId: userId,
+        briefDescription,
+        requirements,
+        objectives,
+        language,
       },
       select: {
         id: true,
+        title: true,
+        description: true,
+        briefDescription: true,
+        category: {
+          select: {
+            name: true,
+            id: true,
+          },
+        },
       },
     });
 
@@ -180,6 +203,10 @@ export async function getCourseByIdInstructor(
         id: true,
         title: true,
         description: true,
+        briefDescription: true,
+        requirements: true,
+        objectives: true,
+        language: true,
         level: true,
         price: true,
         duration: true,
@@ -354,37 +381,73 @@ export async function addLessonToSection(
       return;
     }
 
-    const lesson = await db.lesson.create({
-      data: {
-        sectionId,
-        title,
-        description,
-        duration,
-        videoUrl,
-        videoId,
-        order,
-        fileName,
-      },
-      select: {
-        title: true,
-        description: true,
-        duration: true,
-        videoUrl: true,
-        order: true,
-      },
-    });
-
+    const lesson = await db.$transaction([
+      db.section.update({
+        where: { id: sectionId },
+        data: {
+          duration: {
+            increment: duration,
+          },
+        },
+      }),
+      db.course.update({
+        where: { id: courseId },
+        data: {
+          duration: {
+            increment: duration,
+          },
+        },
+      }),
+      db.lesson.create({
+        data: {
+          sectionId,
+          title,
+          description,
+          duration,
+          videoUrl,
+          videoId,
+          order,
+          fileName,
+        },
+        select: {
+          title: true,
+          description: true,
+          duration: true,
+          videoUrl: true,
+          order: true,
+        },
+      }),
+    ]);
+    console.log("Lesson created:", lesson);
     res.status(201).json({
       message: "Lesson added successfully.",
       success: true,
       data: lesson,
     });
   } catch (error: any) {
-    console.error("Error adding lesson:", error);
-    res.status(500).json({
-      message: error.message || "Something went wrong while adding the lesson.",
-      success: false,
-    });
+    console.error("Error updating lesson order:", error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2034") {
+        res.status(500).json({
+          message: "Failed to create. Please try again later.",
+          success: false,
+        });
+      } else {
+        res.status(500).json({
+          message: "Something went wrong. Please try again later.",
+          success: false,
+        });
+      }
+    } else {
+      if (error instanceof Error) {
+        res.status(500).json({
+          message:
+            error.message ||
+            "Something went wrong while updating the lesson order.",
+          success: false,
+        });
+      }
+    }
   }
 }
 
@@ -414,6 +477,7 @@ export async function deleteLessonInSection(
             id: true,
             title: true,
             videoId: true,
+            duration: true,
             videoUrl: true,
           },
         },
@@ -438,16 +502,38 @@ export async function deleteLessonInSection(
       });
       return;
     }
-    if (section.lessons[0]?.videoId) {
-      const deleteVideo = await deleteMedia(section.lessons[0].videoId);
+    const videoId = section.lessons[0]?.videoId;
+
+    const lessonDuration = section.lessons[0]?.duration || 0;
+
+    const update = await db.$transaction([
+      db.section.update({
+        where: { id: sectionId },
+        data: {
+          duration: {
+            decrement: lessonDuration,
+          },
+        },
+      }),
+      db.course.update({
+        where: { id: courseId },
+        data: {
+          duration: {
+            decrement: lessonDuration,
+          },
+        },
+      }),
+      db.lesson.delete({
+        where: { id: lessonId },
+      }),
+    ]);
+    console.log("Lesson deleted:", update);
+    if (videoId) {
+      const deleteVideo = await deleteMedia(videoId);
       if (!deleteVideo.success) {
         console.error("Error deleting video from ImageKit:", deleteVideo.error);
       }
     }
-    const lesson = await db.lesson.delete({
-      where: { id: lessonId },
-    });
-
     res.status(200).json({
       message: "Lesson deleted successfully.",
       success: true,
@@ -661,7 +747,17 @@ export async function updateCourseDetails(
   res: Response
 ) {
   const { courseId } = req.params;
-  const { title, description, category, level, price } = req.body;
+  const {
+    title,
+    description,
+    category,
+    level,
+    price,
+    briefDescription,
+    requirements,
+    objectives,
+    language,
+  } = req.body;
   const { userId } = req;
 
   if (!courseId) {
@@ -705,6 +801,10 @@ export async function updateCourseDetails(
         level,
         price,
         OriginalPrice: price,
+        briefDescription,
+        requirements,
+        objectives,
+        language,
       },
     });
 

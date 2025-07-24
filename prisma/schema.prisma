@@ -30,26 +30,30 @@ model User {
 }
 
 model Course {
-  id            String       @id @default(auto()) @map("_id") @db.ObjectId
-  title         String
-  description   String
-  thumbnailFile String?
-  thumbnail     String?
-  thumbnailId   String?
-  categoryId    String       @db.ObjectId
-  category      Category     @relation(fields: [categoryId], references: [id])
-  price         Float
-  OriginalPrice Float
-  level         CourseLevel
-  published     Boolean      @default(false)
-  instructorId  String       @db.ObjectId
-  instructor    User         @relation("CourseInstructor", fields: [instructorId], references: [id])
-  reviews       Review[]
-  enrollments   Enrollment[]
-  duration      Int
-  sections      Section[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  description      String
+  briefDescription String?
+  thumbnailFile    String?
+  thumbnail        String?
+  thumbnailId      String?
+  categoryId       String       @db.ObjectId
+  category         Category     @relation(fields: [categoryId], references: [id])
+  price            Float
+  OriginalPrice    Float
+  level            CourseLevel
+  published        Boolean      @default(false)
+  requirements     String[]
+  objectives       String[]
+  language         String
+  instructorId     String       @db.ObjectId
+  instructor       User         @relation("CourseInstructor", fields: [instructorId], references: [id])
+  reviews          Review[]
+  enrollments      Enrollment[]
+  duration         Int          @default(0)
+  sections         Section[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }
 
 model Section {
@@ -58,6 +62,7 @@ model Section {
   course      Course   @relation(fields: [courseId], references: [id])
   title       String
   description String?
+  duration    Int?     @default(0)
   order       Int
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -71,7 +76,7 @@ model Lesson {
   description String?
   videoUrl    String?
   videoId     String?
-  duration    Int?
+  duration    Int      @default(0)
   order       Int
   fileName    String?
   createdAt   DateTime @default(now())
